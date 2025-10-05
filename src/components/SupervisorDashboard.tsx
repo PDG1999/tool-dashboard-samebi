@@ -10,6 +10,7 @@ import {
   MapPin,
   Smartphone
 } from 'lucide-react';
+import AllTestsView from './AllTestsView';
 
 // Mock data - wird später durch echte API-Daten ersetzt
 const mockSupervisorData = {
@@ -64,7 +65,7 @@ const mockSupervisorData = {
 
 const SupervisorDashboard: React.FC = () => {
   const [dateRange, setDateRange] = useState('30d');
-  const [selectedView, setSelectedView] = useState<'overview' | 'analytics' | 'counselors'>('overview');
+  const [selectedView, setSelectedView] = useState<'overview' | 'analytics' | 'tests' | 'counselors'>('overview');
 
   const getRiskColor = (level: string) => {
     switch (level.toLowerCase()) {
@@ -125,6 +126,12 @@ const SupervisorDashboard: React.FC = () => {
                 Übersicht
               </button>
               <button
+                onClick={() => setSelectedView('tests')}
+                className={`pb-2 px-1 ${selectedView === 'tests' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
+              >
+                🔍 Alle Tests
+              </button>
+              <button
                 onClick={() => setSelectedView('analytics')}
                 className={`pb-2 px-1 ${selectedView === 'analytics' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
               >
@@ -143,6 +150,8 @@ const SupervisorDashboard: React.FC = () => {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {selectedView === 'tests' && <AllTestsView />}
+        
         {selectedView === 'overview' && (
           <div className="space-y-6">
             {/* Global Stats */}
