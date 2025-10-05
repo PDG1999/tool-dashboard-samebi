@@ -158,9 +158,24 @@ export const authAPI = {
   },
 };
 
-export default {
+// Counselors API
+export const counselorsAPI = {
+  // Get all counselors (supervisor only)
+  getAll: async () => {
+    return apiCall('/counselors');
+  },
+};
+
+// Combined API object for easier imports
+export const api = {
+  getTestResults: testResultsAPI.getAll,
+  getClients: clientsAPI.getAll,
+  getCounselors: counselorsAPI.getAll,
   testResults: testResultsAPI,
   clients: clientsAPI,
+  counselors: counselorsAPI,
   auth: authAPI,
 };
+
+export default api;
 

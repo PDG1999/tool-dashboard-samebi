@@ -11,7 +11,7 @@ import {
   Smartphone
 } from 'lucide-react';
 import AllTestsView from './AllTestsView';
-import { api } from '../utils/api';
+import { api } from '../services/api';
 
 // Mock data - wird später durch echte API-Daten ersetzt
 const mockSupervisorData = {
