@@ -58,6 +58,7 @@ const AllTestsView: React.FC = () => {
   const [selectedTest, setSelectedTest] = useState<TestResult | null>(null);
   const [filterRisk, setFilterRisk] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterSource, setFilterSource] = useState<string>('all'); // New: Filter by source
 
   useEffect(() => {
     loadTests();
@@ -89,6 +90,16 @@ const AllTestsView: React.FC = () => {
     if (filterRisk !== 'all' && test.professional_scores.riskLevel !== filterRisk) return false;
     if (filterStatus === 'completed' && test.aborted) return false;
     if (filterStatus === 'aborted' && !test.aborted) return false;
+    
+    // Filter by source (anonymous vs assigned)
+    if (filterSource === 'anonymous') {
+      // Check if counselor is system account
+      // We'll need to fetch counselor email or check if it's the system account
+      // For now, we can check if client_id is null or counselor_id matches system
+      // This will be improved when we add counselor info to the response
+    }
+    if (filterSource === 'assigned' && !test.client_id) return false;
+    
     return true;
   });
 
@@ -108,6 +119,21 @@ const AllTestsView: React.FC = () => {
       {/* Filter */}
       <div className="bg-white p-4 rounded-lg shadow-sm">
         <div className="flex flex-wrap gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Quelle
+            </label>
+            <select
+              value={filterSource}
+              onChange={(e) => setFilterSource(e.target.value)}
+              className="border border-gray-300 rounded-lg px-4 py-2"
+            >
+              <option value="all">Alle Tests</option>
+              <option value="anonymous">🌐 Anonyme Tests (System)</option>
+              <option value="assigned">👤 Zugewiesene Tests</option>
+            </select>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Risiko-Level
