@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, 
   Users, 
@@ -11,6 +11,7 @@ import {
   Smartphone
 } from 'lucide-react';
 import AllTestsView from './AllTestsView';
+import { api } from '../utils/api';
 
 // Mock data - wird später durch echte API-Daten ersetzt
 const mockSupervisorData = {
@@ -66,6 +67,76 @@ const mockSupervisorData = {
 const SupervisorDashboard: React.FC = () => {
   const [dateRange, setDateRange] = useState('30d');
   const [selectedView, setSelectedView] = useState<'overview' | 'analytics' | 'tests' | 'counselors'>('overview');
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<any>(null);
+  const [tests, setTests] = useState<any[]>([]);
+
+  // Fetch real data from API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [testResults, clients, counselors] = await Promise.all([
+          api.getTestResults(),
+          api.getClients().catch(() => []),
+          api.getCounselors().catch(() => [])
+        ]);
+
+        setTests(testResults);
+
+        // Calculate real statistics
+        const totalTests = testResults.length;
+        const completedTests = testResults.filter((t: any) => !t.aborted).length;
+        const abortedTests = testResults.filter((t: any) => t.aborted).length;
+        const criticalTests = testResults.filter((t: any) => 
+          t.risk_level === 'Kritisch' || t.risk_level === 'critical'
+        ).length;
+
+        // Risk distribution
+        const riskCounts = testResults.reduce((acc: any, test: any) => {
+          const risk = test.risk_level || 'Unbekannt';
+          acc[risk] = (acc[risk] || 0) + 1;
+          return acc;
+        }, {});
+
+        // Device distribution
+        const deviceCounts = testResults.reduce((acc: any, test: any) => {
+          const device = test.device_type || 'Unknown';
+          acc[device] = (acc[device] || 0) + 1;
+          return acc;
+        }, {});
+
+        // Geographic distribution
+        const cityCounts = testResults.reduce((acc: any, test: any) => {
+          const city = test.city || 'Unbekannt';
+          if (city !== 'Unbekannt') {
+            acc[city] = (acc[city] || 0) + 1;
+          }
+          return acc;
+        }, {});
+
+        setStats({
+          totalTests,
+          completedTests,
+          abortedTests,
+          criticalTests,
+          totalClients: clients.length,
+          totalCounselors: counselors.length,
+          avgCompletionRate: totalTests > 0 ? (completedTests / totalTests * 100).toFixed(1) : 0,
+          riskDistribution: riskCounts,
+          deviceDistribution: deviceCounts,
+          cityDistribution: cityCounts
+        });
+
+      } catch (error) {
+        console.error('Error fetching supervisor data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [dateRange]);
 
   const getRiskColor = (level: string) => {
     switch (level.toLowerCase()) {
@@ -154,126 +225,149 @@ const SupervisorDashboard: React.FC = () => {
         
         {selectedView === 'overview' && (
           <div className="space-y-6">
-            {/* Global Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm">Tests Gesamt</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">
-                      {mockSupervisorData.globalStats.totalTests}
-                    </p>
-                  </div>
-                  <BarChart3 className="w-10 h-10 text-blue-600" />
-                </div>
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                <p className="text-gray-600 mt-4">Lade Daten...</p>
               </div>
-              
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm">Berater</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">
-                      {mockSupervisorData.globalStats.totalCounselors}
-                    </p>
+            ) : stats ? (
+              <>
+                {/* Global Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <div className="bg-white p-6 rounded-lg shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-600 text-sm">Tests Gesamt</p>
+                        <p className="text-3xl font-bold text-gray-900 mt-1">
+                          {stats.totalTests}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {stats.completedTests} abgeschlossen, {stats.abortedTests} abgebrochen
+                        </p>
+                      </div>
+                      <BarChart3 className="w-10 h-10 text-blue-600" />
+                    </div>
                   </div>
-                  <Users className="w-10 h-10 text-green-600" />
-                </div>
-              </div>
-              
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm">Klienten</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">
-                      {mockSupervisorData.globalStats.totalClients}
-                    </p>
+                  
+                  <div className="bg-white p-6 rounded-lg shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-600 text-sm">Berater</p>
+                        <p className="text-3xl font-bold text-gray-900 mt-1">
+                          {stats.totalCounselors}
+                        </p>
+                      </div>
+                      <Users className="w-10 h-10 text-green-600" />
+                    </div>
                   </div>
-                  <Eye className="w-10 h-10 text-purple-600" />
-                </div>
-              </div>
-              
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm">Abschlussrate</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">
-                      {mockSupervisorData.globalStats.avgCompletionRate}%
-                    </p>
+                  
+                  <div className="bg-white p-6 rounded-lg shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-600 text-sm">Kritische Fälle</p>
+                        <p className="text-3xl font-bold text-red-600 mt-1">
+                          {stats.criticalTests}
+                        </p>
+                      </div>
+                      <AlertTriangle className="w-10 h-10 text-red-600" />
+                    </div>
                   </div>
-                  <TrendingUp className="w-10 h-10 text-orange-600" />
+                  
+                  <div className="bg-white p-6 rounded-lg shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-600 text-sm">Abschlussrate</p>
+                        <p className="text-3xl font-bold text-gray-900 mt-1">
+                          {stats.avgCompletionRate}%
+                        </p>
+                      </div>
+                      <TrendingUp className="w-10 h-10 text-orange-600" />
+                    </div>
+                  </div>
                 </div>
+              </>
+            ) : (
+              <div className="text-center py-12 text-gray-600">
+                Keine Daten verfügbar
               </div>
-            </div>
+            )}
 
             {/* Risk Distribution */}
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">
-                Risiko-Verteilung
-              </h3>
-              <div className="space-y-4">
-                {mockSupervisorData.testsByRisk.map((risk) => (
-                  <div key={risk.level}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className={`font-medium px-3 py-1 rounded-full ${getRiskColor(risk.level)}`}>
-                        {risk.level}
-                      </span>
-                      <span className="text-gray-600">
-                        {risk.count} Tests ({risk.percentage}%)
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="h-2 rounded-full"
-                        style={{ 
-                          width: `${risk.percentage}%`,
-                          backgroundColor: risk.color === 'green' ? '#10b981' : 
-                                         risk.color === 'yellow' ? '#f59e0b' : 
-                                         risk.color === 'orange' ? '#f97316' : '#ef4444'
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
+            {stats && stats.riskDistribution && (
+              <div className="bg-white p-6 rounded-lg shadow-sm">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">
+                  Risiko-Verteilung
+                </h3>
+                <div className="space-y-4">
+                  {Object.entries(stats.riskDistribution).map(([level, count]: [string, any]) => {
+                    const percentage = stats.totalTests > 0 ? ((count / stats.totalTests) * 100).toFixed(1) : 0;
+                    return (
+                      <div key={level}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`font-medium px-3 py-1 rounded-full ${getRiskColor(level)}`}>
+                            {level}
+                          </span>
+                          <span className="text-gray-600">
+                            {count} Tests ({percentage}%)
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="h-2 rounded-full bg-blue-600"
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Geographic & Device Distribution */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-                  <MapPin className="w-5 h-5 mr-2" />
-                  Geografische Verteilung
-                </h3>
-                <div className="space-y-3">
-                  {mockSupervisorData.geographicData.map((geo) => (
-                    <div key={geo.city} className="flex items-center justify-between">
-                      <span className="text-gray-700">{geo.city}</span>
-                      <div className="flex items-center space-x-4">
-                        <span className="text-gray-600">{geo.tests} Tests</span>
-                        <span className="text-red-600 font-medium">{geo.criticalRate}% kritisch</span>
-                      </div>
-                    </div>
-                  ))}
+              {stats && stats.cityDistribution && Object.keys(stats.cityDistribution).length > 0 && (
+                <div className="bg-white p-6 rounded-lg shadow-sm">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                    <MapPin className="w-5 h-5 mr-2" />
+                    Geografische Verteilung
+                  </h3>
+                  <div className="space-y-3">
+                    {Object.entries(stats.cityDistribution)
+                      .sort(([, a]: any, [, b]: any) => b - a)
+                      .slice(0, 10)
+                      .map(([city, count]: [string, any]) => (
+                        <div key={city} className="flex items-center justify-between">
+                          <span className="text-gray-700">{city}</span>
+                          <span className="text-gray-600">{count} Tests</span>
+                        </div>
+                      ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-                  <Smartphone className="w-5 h-5 mr-2" />
-                  Geräte-Verteilung
-                </h3>
-                <div className="space-y-3">
-                  {mockSupervisorData.deviceData.map((device) => (
-                    <div key={device.type} className="flex items-center justify-between">
-                      <span className="text-gray-700">{device.type}</span>
-                      <div className="flex items-center space-x-4">
-                        <span className="text-gray-600">{device.count}</span>
-                        <span className="text-blue-600 font-medium">{device.percentage}%</span>
-                      </div>
-                    </div>
-                  ))}
+              {stats && stats.deviceDistribution && Object.keys(stats.deviceDistribution).length > 0 && (
+                <div className="bg-white p-6 rounded-lg shadow-sm">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                    <Smartphone className="w-5 h-5 mr-2" />
+                    Geräte-Verteilung
+                  </h3>
+                  <div className="space-y-3">
+                    {Object.entries(stats.deviceDistribution).map(([device, count]: [string, any]) => {
+                      const percentage = stats.totalTests > 0 ? ((count / stats.totalTests) * 100).toFixed(1) : 0;
+                      return (
+                        <div key={device} className="flex items-center justify-between">
+                          <span className="text-gray-700">{device}</span>
+                          <div className="flex items-center space-x-4">
+                            <span className="text-gray-600">{count}</span>
+                            <span className="text-blue-600 font-medium">{percentage}%</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         )}
