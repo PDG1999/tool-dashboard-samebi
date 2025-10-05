@@ -95,19 +95,10 @@ const LoginComponent: React.FC<LoginProps> = ({ type, onLogin }) => {
           </button>
         </form>
 
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg text-sm text-gray-600">
-          <p className="font-semibold mb-2">Demo-Zugangsdaten:</p>
-          {type === 'supervisor' ? (
-            <>
-              <p>E-Mail: supervisor@samebi.net</p>
-              <p>Passwort: Supervisor2025!</p>
-            </>
-          ) : (
-            <>
-              <p>E-Mail: berater@samebi.net</p>
-              <p>Passwort: Demo2025!</p>
-            </>
-          )}
+        <div className="mt-6 text-center">
+          <p className="text-sm text-gray-600">
+            Noch kein Zugang? Kontaktieren Sie uns für ein Berater-Konto.
+          </p>
         </div>
       </div>
     </div>
