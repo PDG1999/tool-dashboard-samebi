@@ -31,9 +31,21 @@ interface TestResult {
     riskLevel: 'Niedrig' | 'Mittel' | 'Hoch' | 'Kritisch';
     primaryConcern: string;
     addictionDirection?: {
-      primary: string;
-      secondary?: string;
-      confidence: number;
+      primary?: {
+        type: string;
+        confidence: number;
+        indicators: string[];
+      };
+      secondary?: {
+        type: string;
+        confidence: number;
+        indicators: string[];
+      };
+      patterns?: {
+        polyaddiction: boolean;
+        substanceBased: number;
+        behavioralBased: number;
+      };
     };
   };
   tracking_data: {
@@ -258,7 +270,7 @@ const AllTestsView: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {test.professional_scores.addictionDirection?.primary || test.professional_scores.primaryConcern}
+                      {test.professional_scores.addictionDirection?.primary?.type || test.professional_scores.primaryConcern}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {test.aborted ? (
@@ -344,31 +356,39 @@ const AllTestsView: React.FC = () => {
                     <div>
                       <p className="text-sm text-gray-600">Primäre Richtung</p>
                       <p className="text-lg font-semibold text-blue-900">
-                        {selectedTest.professional_scores.addictionDirection.primary}
+                        {selectedTest.professional_scores.addictionDirection.primary?.type || 'Unbekannt'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Konfidenz: {selectedTest.professional_scores.addictionDirection.primary?.confidence || 0}%
                       </p>
                     </div>
                     {selectedTest.professional_scores.addictionDirection.secondary && (
                       <div>
                         <p className="text-sm text-gray-600">Sekundäre Richtung</p>
                         <p className="text-lg font-semibold text-blue-800">
-                          {selectedTest.professional_scores.addictionDirection.secondary}
+                          {selectedTest.professional_scores.addictionDirection.secondary?.type || 'Unbekannt'}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Konfidenz: {selectedTest.professional_scores.addictionDirection.secondary?.confidence || 0}%
                         </p>
                       </div>
                     )}
-                    <div>
-                      <p className="text-sm text-gray-600">Konfidenz</p>
-                      <div className="flex items-center space-x-2">
-                        <div className="flex-1 bg-gray-200 rounded-full h-2">
-                          <div 
-                            className="bg-blue-600 h-2 rounded-full"
-                            style={{ width: `${selectedTest.professional_scores.addictionDirection.confidence}%` }}
-                          />
+                    {selectedTest.professional_scores.addictionDirection.patterns && (
+                      <div>
+                        <p className="text-sm text-gray-600">Muster-Analyse</p>
+                        <div className="mt-2 space-y-1 text-xs">
+                          {selectedTest.professional_scores.addictionDirection.patterns.polyaddiction && (
+                            <p className="text-orange-600">⚠️ Polysucht-Muster erkannt</p>
+                          )}
+                          <p className="text-gray-600">
+                            Substanzbasiert: {selectedTest.professional_scores.addictionDirection.patterns.substanceBased}%
+                          </p>
+                          <p className="text-gray-600">
+                            Verhaltensbasiert: {selectedTest.professional_scores.addictionDirection.patterns.behavioralBased}%
+                          </p>
                         </div>
-                        <span className="text-sm font-medium text-gray-900">
-                          {selectedTest.professional_scores.addictionDirection.confidence}%
-                        </span>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               )}
