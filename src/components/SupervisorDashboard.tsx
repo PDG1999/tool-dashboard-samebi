@@ -13,56 +13,7 @@ import {
 import AllTestsView from './AllTestsView';
 import { api } from '../services/api';
 
-// Mock data - wird später durch echte API-Daten ersetzt
-const mockSupervisorData = {
-  globalStats: {
-    totalTests: 1234,
-    totalCounselors: 45,
-    totalClients: 892,
-    avgCompletionRate: 78,
-    avgTestDuration: 485,
-    mostCriticalCategory: 'Spielsucht',
-  },
-  testsByRisk: [
-    { level: 'Niedrig', count: 450, percentage: 36.5, color: 'green' },
-    { level: 'Mittel', count: 380, percentage: 30.8, color: 'yellow' },
-    { level: 'Hoch', count: 290, percentage: 23.5, color: 'orange' },
-    { level: 'Kritisch', count: 114, percentage: 9.2, color: 'red' },
-  ],
-  abortAnalytics: {
-    totalAborts: 267,
-    abortRate: 21.6,
-    criticalQuestions: [
-      { questionId: 'f3_8', question: 'Wie oft spielen Sie Glücksspiele?', abortCount: 45, avgTimeBeforeAbort: 32 },
-      { questionId: 'f2_4', question: 'Haben Sie jemals versucht, Ihr Verhalten zu verbergen?', abortCount: 38, avgTimeBeforeAbort: 28 },
-      { questionId: 'f2_7', question: 'Wie viel Geld geben Sie aus?', abortCount: 31, avgTimeBeforeAbort: 41 },
-    ],
-  },
-  questionMetrics: {
-    avgTimePerQuestion: 12.1,
-    mostDifficultQuestions: [
-      { questionId: 'f3_8', avgTime: 45, changeRate: 0.32 },
-      { questionId: 'f2_7', avgTime: 41, changeRate: 0.28 },
-      { questionId: 'f2_4', avgTime: 38, changeRate: 0.25 },
-    ],
-  },
-  geographicData: [
-    { city: 'Berlin', tests: 245, criticalRate: 12.2 },
-    { city: 'München', tests: 189, criticalRate: 8.5 },
-    { city: 'Hamburg', tests: 167, criticalRate: 9.8 },
-    { city: 'Köln', tests: 134, criticalRate: 11.2 },
-  ],
-  deviceData: [
-    { type: 'Desktop', count: 645, percentage: 52.3 },
-    { type: 'Mobile', count: 456, percentage: 37.0 },
-    { type: 'Tablet', count: 133, percentage: 10.7 },
-  ],
-  counselorPerformance: [
-    { name: 'Dr. Mueller', clients: 45, tests: 89, avgRisk: 42 },
-    { name: 'Dr. Schmidt', clients: 38, tests: 76, avgRisk: 38 },
-    { name: 'Dr. Weber', clients: 32, tests: 64, avgRisk: 51 },
-  ],
-};
+// Real data is now fetched from API - no more mock data needed!
 
 const SupervisorDashboard: React.FC = () => {
   const [dateRange, setDateRange] = useState('30d');
@@ -70,19 +21,23 @@ const SupervisorDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
   const [tests, setTests] = useState<any[]>([]);
+  const [counselors, setCounselors] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
 
   // Fetch real data from API
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [testResults, clients, counselors] = await Promise.all([
+        const [testResults, clientsData, counselorsData] = await Promise.all([
           api.getTestResults(),
           api.getClients().catch(() => []),
           api.getCounselors().catch(() => [])
         ]);
 
         setTests(testResults);
+        setClients(clientsData);
+        setCounselors(counselorsData);
 
         // Calculate real statistics
         const totalTests = testResults.length;
@@ -115,17 +70,39 @@ const SupervisorDashboard: React.FC = () => {
           return acc;
         }, {});
 
+        // Abort analytics
+        const abortedTestsData = testResults.filter((t: any) => t.aborted);
+        const abortRate = totalTests > 0 ? ((abortedTests / totalTests) * 100).toFixed(1) : 0;
+        
+        // Question abort analysis
+        const questionAborts = abortedTestsData.reduce((acc: any, test: any) => {
+          const questionNum = test.aborted_at_question;
+          if (questionNum) {
+            if (!acc[questionNum]) {
+              acc[questionNum] = { count: 0, questionNum };
+            }
+            acc[questionNum].count++;
+          }
+          return acc;
+        }, {});
+        
+        const criticalQuestions = Object.values(questionAborts)
+          .sort((a: any, b: any) => b.count - a.count)
+          .slice(0, 5);
+
         setStats({
           totalTests,
           completedTests,
           abortedTests,
           criticalTests,
-          totalClients: clients.length,
-          totalCounselors: counselors.length,
+          totalClients: clientsData.length,
+          totalCounselors: counselorsData.length,
           avgCompletionRate: totalTests > 0 ? (completedTests / totalTests * 100).toFixed(1) : 0,
           riskDistribution: riskCounts,
           deviceDistribution: deviceCounts,
-          cityDistribution: cityCounts
+          cityDistribution: cityCounts,
+          abortRate,
+          criticalQuestions
         });
 
       } catch (error) {
@@ -374,120 +351,174 @@ const SupervisorDashboard: React.FC = () => {
 
         {selectedView === 'analytics' && (
           <div className="space-y-6">
-            {/* Abort Analytics */}
-            <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-red-500">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-                <AlertTriangle className="w-5 h-5 mr-2 text-red-600" />
-                Abbruch-Analytics
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div>
-                  <p className="text-gray-600 text-sm">Abbrüche Gesamt</p>
-                  <p className="text-2xl font-bold text-red-600">
-                    {mockSupervisorData.abortAnalytics.totalAborts}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-600 text-sm">Abbruch-Rate</p>
-                  <p className="text-2xl font-bold text-red-600">
-                    {mockSupervisorData.abortAnalytics.abortRate}%
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-600 text-sm">Kritische Fragen</p>
-                  <p className="text-2xl font-bold text-red-600">
-                    {mockSupervisorData.abortAnalytics.criticalQuestions.length}
-                  </p>
-                </div>
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                <p className="text-gray-600 mt-4">Lade Analytics...</p>
               </div>
-              
-              <h4 className="font-bold text-gray-900 mb-3">Kritische Fragen:</h4>
-              <div className="space-y-3">
-                {mockSupervisorData.abortAnalytics.criticalQuestions.map((q) => (
-                  <div key={q.questionId} className="bg-red-50 p-4 rounded-lg">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{q.question}</p>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {q.abortCount} Abbrüche • Ø {q.avgTimeBeforeAbort}s vor Abbruch
-                        </p>
+            ) : stats ? (
+              <>
+                {/* Abort Analytics */}
+                <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-red-500">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                    <AlertTriangle className="w-5 h-5 mr-2 text-red-600" />
+                    Abbruch-Analytics
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div>
+                      <p className="text-gray-600 text-sm">Abbrüche Gesamt</p>
+                      <p className="text-2xl font-bold text-red-600">
+                        {stats.abortedTests}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600 text-sm">Abbruch-Rate</p>
+                      <p className="text-2xl font-bold text-red-600">
+                        {stats.abortRate}%
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600 text-sm">Kritische Fragen</p>
+                      <p className="text-2xl font-bold text-red-600">
+                        {stats.criticalQuestions?.length || 0}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {stats.criticalQuestions && stats.criticalQuestions.length > 0 && (
+                    <>
+                      <h4 className="font-bold text-gray-900 mb-3">Häufigste Abbruch-Fragen:</h4>
+                      <div className="space-y-3">
+                        {stats.criticalQuestions.map((q: any) => (
+                          <div key={q.questionNum} className="bg-red-50 p-4 rounded-lg">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-900">Frage #{q.questionNum}</p>
+                                <p className="text-sm text-gray-600 mt-1">
+                                  {q.count} Abbrüche bei dieser Frage
+                                </p>
+                              </div>
+                              <span className="bg-red-600 text-white px-3 py-1 rounded-full text-sm">
+                                {q.count}x
+                              </span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <span className="bg-red-600 text-white px-3 py-1 rounded-full text-sm">
-                        {q.questionId}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+                    </>
+                  )}
+                </div>
 
-            {/* Question Metrics */}
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-                <Clock className="w-5 h-5 mr-2 text-blue-600" />
-                Fragen-Metriken
-              </h3>
-              <p className="text-gray-600 mb-4">
-                Durchschnittliche Zeit pro Frage: <span className="font-bold text-blue-600">{mockSupervisorData.questionMetrics.avgTimePerQuestion}s</span>
-              </p>
-              
-              <h4 className="font-bold text-gray-900 mb-3">Schwierigste Fragen (längste Denkzeit):</h4>
-              <div className="space-y-3">
-                {mockSupervisorData.questionMetrics.mostDifficultQuestions.map((q) => (
-                  <div key={q.questionId} className="bg-yellow-50 p-4 rounded-lg flex items-center justify-between">
-                    <span className="font-medium">{q.questionId}</span>
-                    <div className="flex items-center space-x-6">
-                      <span className="text-gray-600">Ø {q.avgTime}s</span>
-                      <span className="text-orange-600">{(q.changeRate * 100).toFixed(0)}% Änderungen</span>
+                {/* Completion Stats */}
+                <div className="bg-white p-6 rounded-lg shadow-sm">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                    <Clock className="w-5 h-5 mr-2 text-blue-600" />
+                    Test-Statistiken
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                      <p className="text-gray-600 text-sm">Abgeschlossene Tests</p>
+                      <p className="text-2xl font-bold text-green-600">{stats.completedTests}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {stats.avgCompletionRate}% Abschlussrate
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600 text-sm">Abgebrochene Tests</p>
+                      <p className="text-2xl font-bold text-orange-600">{stats.abortedTests}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {stats.abortRate}% Abbruchrate
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600 text-sm">Kritische Fälle</p>
+                      <p className="text-2xl font-bold text-red-600">{stats.criticalTests}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {stats.totalTests > 0 ? ((stats.criticalTests / stats.totalTests) * 100).toFixed(1) : 0}% aller Tests
+                      </p>
                     </div>
                   </div>
-                ))}
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-12 text-gray-600">
+                Keine Analytics-Daten verfügbar
               </div>
-            </div>
+            )}
           </div>
         )}
 
         {selectedView === 'counselors' && (
           <div className="bg-white p-6 rounded-lg shadow-sm">
             <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Berater-Performance
+              Berater-Übersicht
             </h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Klienten</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tests</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ø Risiko</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {mockSupervisorData.counselorPerformance.map((counselor) => (
-                    <tr key={counselor.name}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {counselor.name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {counselor.clients}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {counselor.tests}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-3 py-1 rounded-full text-sm ${
-                          counselor.avgRisk >= 60 ? 'bg-red-100 text-red-600' :
-                          counselor.avgRisk >= 40 ? 'bg-yellow-100 text-yellow-600' :
-                          'bg-green-100 text-green-600'
-                        }`}>
-                          {counselor.avgRisk}%
-                        </span>
-                      </td>
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                <p className="text-gray-600 mt-4">Lade Berater-Daten...</p>
+              </div>
+            ) : counselors.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">E-Mail</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rolle</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lizenz</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Klienten</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tests</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {counselors.map((counselor: any) => {
+                      const counselorClients = clients.filter((c: any) => c.counselor_id === counselor.id);
+                      const counselorTests = tests.filter((t: any) => t.counselor_id === counselor.id);
+                      
+                      return (
+                        <tr key={counselor.id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {counselor.name}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {counselor.email}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            <span className={`px-2 py-1 rounded-full text-xs ${
+                              counselor.role === 'supervisor' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {counselor.role === 'supervisor' ? '👑 Supervisor' : '👤 Berater'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {counselor.license_number}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 rounded-full text-xs ${
+                              counselor.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {counselor.is_active ? '✅ Aktiv' : '❌ Inaktiv'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {counselorClients.length}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {counselorTests.length}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-600">
+                Keine Berater-Daten verfügbar
+              </div>
+            )}
           </div>
         )}
       </div>
