@@ -276,11 +276,11 @@ const AllTestsView: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div className="flex items-center">
                         <MapPin className="w-4 h-4 mr-1" />
-                        {test.tracking_data.geo_data?.city || 'Unbekannt'}
+                        {test.tracking_data?.geo_data?.city || 'Unbekannt'}
                       </div>
                       <div className="flex items-center text-xs text-gray-400 mt-1">
                         <Smartphone className="w-3 h-3 mr-1" />
-                        {test.tracking_data.device_type || 'Desktop'}
+                        {test.tracking_data?.device_type || 'Desktop'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -411,12 +411,12 @@ const AllTestsView: React.FC = () => {
                   <div className="flex justify-between">
                     <span className="text-gray-600">Standort:</span>
                     <span className="font-medium">
-                      {selectedTest.tracking_data.geo_data?.city}, {selectedTest.tracking_data.geo_data?.country || 'Unbekannt'}
+                      {selectedTest.tracking_data?.geo_data?.city || 'Unbekannt'}, {selectedTest.tracking_data?.geo_data?.country || 'Unbekannt'}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Gerät:</span>
-                    <span className="font-medium">{selectedTest.tracking_data.device_type || 'Desktop'}</span>
+                    <span className="font-medium">{selectedTest.tracking_data?.device_type || 'Desktop'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Fragen beantwortet:</span>
