@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import DashboardLayout from './components/DashboardLayout';
 import SupervisorDashboard from './components/SupervisorDashboard';
 import { LogIn } from 'lucide-react';
+import { authAPI } from './services/api';
 
 // Simple Login Component
 interface LoginProps {
@@ -14,24 +15,34 @@ const LoginComponent: React.FC<LoginProps> = ({ type, onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
 
-    // Demo login credentials
-    if (type === 'supervisor') {
-      if (email === 'supervisor@samebi.net' && password === 'Supervisor2025!') {
-        onLogin(true);
+    try {
+      // Call real API
+      const response = await authAPI.login(email, password);
+      
+      if (response.success && response.data.token) {
+        // Save token to localStorage
+        localStorage.setItem('auth_token', response.data.token);
+        
+        // Check if user is supervisor
+        const isSupervisor = response.data.counselor.role === 'supervisor';
+        
+        // Call onLogin callback
+        onLogin(isSupervisor);
       } else {
-        setError('Ungültige Supervisor-Zugangsdaten');
+        setError('Login fehlgeschlagen');
       }
-    } else {
-      if (email === 'berater@samebi.net' && password === 'Demo2025!') {
-        onLogin(false);
-      } else {
-        setError('Ungültige Berater-Zugangsdaten');
-      }
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setError(err.message || 'Ungültige Anmeldedaten');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -89,9 +100,10 @@ const LoginComponent: React.FC<LoginProps> = ({ type, onLogin }) => {
 
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+            disabled={isLoading}
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Anmelden
+            {isLoading ? 'Anmelden...' : 'Anmelden'}
           </button>
         </form>
 
@@ -115,6 +127,8 @@ function App() {
   };
 
   const handleLogout = () => {
+    // Remove token from localStorage
+    localStorage.removeItem('auth_token');
     setIsAuthenticated(false);
     setIsSupervisor(false);
   };
