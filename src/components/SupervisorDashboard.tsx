@@ -8,112 +8,143 @@ import {
   Eye,
   Download,
   MapPin,
-  Smartphone
+  Smartphone,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
-import AllTestsView from './AllTestsView';
-import { api } from '../services/api';
+import api from '../services/api';
 
-// Real data is now fetched from API - no more mock data needed!
+interface SupervisorData {
+  globalStats: {
+    totalTests: number;
+    totalCounselors: number;
+    totalClients: number;
+    avgCompletionRate: number;
+    avgTestDuration: number;
+    mostCriticalCategory: string;
+  };
+  testsByRisk: Array<{ level: string; count: number; percentage: number; color: string }>;
+  abortAnalytics: {
+    totalAborts: number;
+    abortRate: number;
+    criticalQuestions: Array<any>;
+  };
+  geographicData: Array<{ city: string; tests: number; criticalRate: number }>;
+  deviceData: Array<{ type: string; count: number; percentage: number }>;
+  counselorPerformance: Array<{ name: string; clients: number; tests: number; avgRisk: number }>;
+}
 
 const SupervisorDashboard: React.FC = () => {
   const [dateRange, setDateRange] = useState('30d');
-  const [selectedView, setSelectedView] = useState<'overview' | 'analytics' | 'tests' | 'counselors'>('overview');
+  const [selectedView, setSelectedView] = useState<'overview' | 'analytics' | 'counselors'>('overview');
+  const [data, setData] = useState<SupervisorData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any>(null);
-  const [tests, setTests] = useState<any[]>([]);
-  const [counselors, setCounselors] = useState<any[]>([]);
-  const [clients, setClients] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fetch real data from API
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [testResults, clientsData, counselorsData] = await Promise.all([
-          api.getTestResults(),
-          api.getClients().catch(() => []),
-          api.getCounselors().catch(() => [])
-        ]);
-
-        setTests(testResults);
-        setClients(clientsData);
-        setCounselors(counselorsData);
-
-        // Calculate real statistics
-        const totalTests = testResults.length;
-        const completedTests = testResults.filter((t: any) => !t.aborted).length;
-        const abortedTests = testResults.filter((t: any) => t.aborted).length;
-        const criticalTests = testResults.filter((t: any) => 
-          t.risk_level === 'Kritisch' || t.risk_level === 'critical'
-        ).length;
-
-        // Risk distribution
-        const riskCounts = testResults.reduce((acc: any, test: any) => {
-          const risk = test.risk_level || 'Unbekannt';
-          acc[risk] = (acc[risk] || 0) + 1;
-          return acc;
-        }, {});
-
-        // Device distribution
-        const deviceCounts = testResults.reduce((acc: any, test: any) => {
-          const device = test.device_type || 'Unknown';
-          acc[device] = (acc[device] || 0) + 1;
-          return acc;
-        }, {});
-
-        // Geographic distribution
-        const cityCounts = testResults.reduce((acc: any, test: any) => {
-          const city = test.city || 'Unbekannt';
-          if (city !== 'Unbekannt') {
-            acc[city] = (acc[city] || 0) + 1;
-          }
-          return acc;
-        }, {});
-
-        // Abort analytics
-        const abortedTestsData = testResults.filter((t: any) => t.aborted);
-        const abortRate = totalTests > 0 ? ((abortedTests / totalTests) * 100).toFixed(1) : 0;
-        
-        // Question abort analysis
-        const questionAborts = abortedTestsData.reduce((acc: any, test: any) => {
-          const questionNum = test.aborted_at_question;
-          if (questionNum) {
-            if (!acc[questionNum]) {
-              acc[questionNum] = { count: 0, questionNum };
-            }
-            acc[questionNum].count++;
-          }
-          return acc;
-        }, {});
-        
-        const criticalQuestions = Object.values(questionAborts)
-          .sort((a: any, b: any) => b.count - a.count)
-          .slice(0, 5);
-
-        setStats({
-          totalTests,
-          completedTests,
-          abortedTests,
-          criticalTests,
-          totalClients: clientsData.length,
-          totalCounselors: counselorsData.length,
-          avgCompletionRate: totalTests > 0 ? (completedTests / totalTests * 100).toFixed(1) : 0,
-          riskDistribution: riskCounts,
-          deviceDistribution: deviceCounts,
-          cityDistribution: cityCounts,
-          abortRate,
-          criticalQuestions
-        });
-
-      } catch (error) {
-        console.error('Error fetching supervisor data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+    loadSupervisorData();
   }, [dateRange]);
+
+  const loadSupervisorData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Lade alle benötigten Daten parallel
+      const [testsData, counselorsData] = await Promise.all([
+        api.testResults.getAll(),
+        api.counselors.getStats(),
+      ]);
+
+      // Berechne Statistiken aus echten Daten
+      const totalTests = testsData.length;
+      const completedTests = testsData.filter((t: any) => !t.aborted);
+      const abortedTests = testsData.filter((t: any) => t.aborted);
+      
+      // Risiko-Verteilung
+      const riskCounts = {
+        'Niedrig': testsData.filter((t: any) => t.risk_level === 'low').length,
+        'Mittel': testsData.filter((t: any) => t.risk_level === 'moderate').length,
+        'Hoch': testsData.filter((t: any) => t.risk_level === 'high').length,
+        'Kritisch': testsData.filter((t: any) => t.risk_level === 'critical').length,
+      };
+
+      const testsByRisk = Object.entries(riskCounts).map(([level, count]) => ({
+        level,
+        count,
+        percentage: totalTests > 0 ? (count / totalTests) * 100 : 0,
+        color: level === 'Niedrig' ? 'green' : level === 'Mittel' ? 'yellow' : level === 'Hoch' ? 'orange' : 'red'
+      }));
+
+      // Geografische Daten
+      const geoMap = new Map<string, { count: number; critical: number }>();
+      testsData.forEach((t: any) => {
+        const city = t.tracking_data?.geo_data?.city || 'Unbekannt';
+        const existing = geoMap.get(city) || { count: 0, critical: 0 };
+        existing.count++;
+        if (t.risk_level === 'critical') existing.critical++;
+        geoMap.set(city, existing);
+      });
+
+      const geographicData = Array.from(geoMap.entries())
+        .map(([city, data]) => ({
+          city,
+          tests: data.count,
+          criticalRate: data.count > 0 ? (data.critical / data.count) * 100 : 0
+        }))
+        .sort((a, b) => b.tests - a.tests)
+        .slice(0, 5);
+
+      // Geräte-Daten
+      const deviceMap = new Map<string, number>();
+      testsData.forEach((t: any) => {
+        const device = t.tracking_data?.device_type || 'Unbekannt';
+        deviceMap.set(device, (deviceMap.get(device) || 0) + 1);
+      });
+
+      const deviceData = Array.from(deviceMap.entries())
+        .map(([type, count]) => ({
+          type,
+          count,
+          percentage: totalTests > 0 ? (count / totalTests) * 100 : 0
+        }))
+        .sort((a, b) => b.count - a.count);
+
+      // Berater-Performance
+      const counselorPerformance = counselorsData.map((c: any) => ({
+        name: c.name,
+        clients: parseInt(c.total_clients) || 0,
+        tests: parseInt(c.total_tests) || 0,
+        avgRisk: parseFloat(c.avg_risk_score) || 0
+      }));
+
+      setData({
+        globalStats: {
+          totalTests,
+          totalCounselors: counselorsData.length,
+          totalClients: counselorPerformance.reduce((sum: number, c: any) => sum + c.clients, 0),
+          avgCompletionRate: totalTests > 0 ? (completedTests.length / totalTests) * 100 : 0,
+          avgTestDuration: 0, // Wird später implementiert wenn test_duration in DB
+          mostCriticalCategory: 'Daten verfügbar', // Wird später implementiert
+        },
+        testsByRisk,
+        abortAnalytics: {
+          totalAborts: abortedTests.length,
+          abortRate: totalTests > 0 ? (abortedTests.length / totalTests) * 100 : 0,
+          criticalQuestions: [] // Wird später implementiert wenn mehr Daten vorhanden
+        },
+        geographicData,
+        deviceData,
+        counselorPerformance
+      });
+
+    } catch (err: any) {
+      console.error('Error loading supervisor data:', err);
+      setError(err.message || 'Fehler beim Laden der Daten');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getRiskColor = (level: string) => {
     switch (level.toLowerCase()) {
@@ -124,6 +155,49 @@ const SupervisorDashboard: React.FC = () => {
       default: return 'text-gray-600 bg-gray-50';
     }
   };
+
+  // Loading State
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Lade Supervisor-Daten...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error State
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
+          <AlertTriangle className="w-12 h-12 text-red-600 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-red-900 mb-2 text-center">Fehler beim Laden</h2>
+          <p className="text-red-700 text-center mb-4">{error}</p>
+          <button
+            onClick={loadSupervisorData}
+            className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+          >
+            Erneut versuchen
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // No Data State
+  if (!data) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Eye className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600">Keine Daten verfügbar</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -156,6 +230,16 @@ const SupervisorDashboard: React.FC = () => {
                 </select>
                 
                 <button 
+                  onClick={loadSupervisorData}
+                  disabled={loading}
+                  className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Daten aktualisieren"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                  <span>Aktualisieren</span>
+                </button>
+                
+                <button 
                   className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
                   title="Daten exportieren"
                 >
@@ -172,12 +256,6 @@ const SupervisorDashboard: React.FC = () => {
                 className={`pb-2 px-1 ${selectedView === 'overview' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
               >
                 Übersicht
-              </button>
-              <button
-                onClick={() => setSelectedView('tests')}
-                className={`pb-2 px-1 ${selectedView === 'tests' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
-              >
-                🔍 Alle Tests
               </button>
               <button
                 onClick={() => setSelectedView('analytics')}
@@ -198,327 +276,256 @@ const SupervisorDashboard: React.FC = () => {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {selectedView === 'tests' && <AllTestsView />}
-        
         {selectedView === 'overview' && (
           <div className="space-y-6">
-            {loading ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="text-gray-600 mt-4">Lade Daten...</p>
-              </div>
-            ) : stats ? (
-              <>
-                {/* Global Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                  <div className="bg-white p-6 rounded-lg shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-gray-600 text-sm">Tests Gesamt</p>
-                        <p className="text-3xl font-bold text-gray-900 mt-1">
-                          {stats.totalTests}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {stats.completedTests} abgeschlossen, {stats.abortedTests} abgebrochen
-                        </p>
-                      </div>
-                      <BarChart3 className="w-10 h-10 text-blue-600" />
-                    </div>
+            {/* Global Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm">Tests Gesamt</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">
+                      {data.globalStats.totalTests}
+                    </p>
                   </div>
-                  
-                  <div className="bg-white p-6 rounded-lg shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-gray-600 text-sm">Berater</p>
-                        <p className="text-3xl font-bold text-gray-900 mt-1">
-                          {stats.totalCounselors}
-                        </p>
-                      </div>
-                      <Users className="w-10 h-10 text-green-600" />
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white p-6 rounded-lg shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-gray-600 text-sm">Kritische Fälle</p>
-                        <p className="text-3xl font-bold text-red-600 mt-1">
-                          {stats.criticalTests}
-                        </p>
-                      </div>
-                      <AlertTriangle className="w-10 h-10 text-red-600" />
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white p-6 rounded-lg shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-gray-600 text-sm">Abschlussrate</p>
-                        <p className="text-3xl font-bold text-gray-900 mt-1">
-                          {stats.avgCompletionRate}%
-                        </p>
-                      </div>
-                      <TrendingUp className="w-10 h-10 text-orange-600" />
-                    </div>
-                  </div>
+                  <BarChart3 className="w-10 h-10 text-blue-600" />
                 </div>
-              </>
-            ) : (
-              <div className="text-center py-12 text-gray-600">
-                Keine Daten verfügbar
               </div>
-            )}
+              
+              <div className="bg-white p-6 rounded-lg shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm">Berater</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">
+                      {data.globalStats.totalCounselors}
+                    </p>
+                  </div>
+                  <Users className="w-10 h-10 text-green-600" />
+                </div>
+              </div>
+              
+              <div className="bg-white p-6 rounded-lg shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm">Klienten</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">
+                      {data.globalStats.totalClients}
+                    </p>
+                  </div>
+                  <Eye className="w-10 h-10 text-purple-600" />
+                </div>
+              </div>
+              
+              <div className="bg-white p-6 rounded-lg shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm">Abschlussrate</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">
+                      {data.globalStats.avgCompletionRate.toFixed(1)}%
+                    </p>
+                  </div>
+                  <TrendingUp className="w-10 h-10 text-orange-600" />
+                </div>
+              </div>
+            </div>
 
             {/* Risk Distribution */}
-            {stats && stats.riskDistribution && (
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">
-                  Risiko-Verteilung
-                </h3>
-                <div className="space-y-4">
-                  {Object.entries(stats.riskDistribution).map(([level, count]: [string, any]) => {
-                    const percentage = stats.totalTests > 0 ? ((count / stats.totalTests) * 100).toFixed(1) : 0;
-                    return (
-                      <div key={level}>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className={`font-medium px-3 py-1 rounded-full ${getRiskColor(level)}`}>
-                            {level}
-                          </span>
-                          <span className="text-gray-600">
-                            {count} Tests ({percentage}%)
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className="h-2 rounded-full bg-blue-600"
-                            style={{ width: `${percentage}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+            <div className="bg-white p-6 rounded-lg shadow-sm">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">
+                Risiko-Verteilung
+              </h3>
+              <div className="space-y-4">
+                {data.testsByRisk.map((risk) => (
+                  <div key={risk.level}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`font-medium px-3 py-1 rounded-full ${getRiskColor(risk.level)}`}>
+                        {risk.level}
+                      </span>
+                      <span className="text-gray-600">
+                        {risk.count} Tests ({risk.percentage}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{ 
+                          width: `${risk.percentage}%`,
+                          backgroundColor: risk.color === 'green' ? '#10b981' : 
+                                         risk.color === 'yellow' ? '#f59e0b' : 
+                                         risk.color === 'orange' ? '#f97316' : '#ef4444'
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
 
             {/* Geographic & Device Distribution */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {stats && stats.cityDistribution && Object.keys(stats.cityDistribution).length > 0 && (
-                <div className="bg-white p-6 rounded-lg shadow-sm">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-                    <MapPin className="w-5 h-5 mr-2" />
-                    Geografische Verteilung
-                  </h3>
-                  <div className="space-y-3">
-                    {Object.entries(stats.cityDistribution)
-                      .sort(([, a]: any, [, b]: any) => b - a)
-                      .slice(0, 10)
-                      .map(([city, count]: [string, any]) => (
-                        <div key={city} className="flex items-center justify-between">
-                          <span className="text-gray-700">{city}</span>
-                          <span className="text-gray-600">{count} Tests</span>
-                        </div>
-                      ))}
-                  </div>
+              <div className="bg-white p-6 rounded-lg shadow-sm">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                  <MapPin className="w-5 h-5 mr-2" />
+                  Geografische Verteilung
+                </h3>
+                <div className="space-y-3">
+                  {data.geographicData.map((geo) => (
+                    <div key={geo.city} className="flex items-center justify-between">
+                      <span className="text-gray-700">{geo.city}</span>
+                      <div className="flex items-center space-x-4">
+                        <span className="text-gray-600">{geo.tests} Tests</span>
+                        <span className="text-red-600 font-medium">{geo.criticalRate}% kritisch</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )}
+              </div>
 
-              {stats && stats.deviceDistribution && Object.keys(stats.deviceDistribution).length > 0 && (
-                <div className="bg-white p-6 rounded-lg shadow-sm">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-                    <Smartphone className="w-5 h-5 mr-2" />
-                    Geräte-Verteilung
-                  </h3>
-                  <div className="space-y-3">
-                    {Object.entries(stats.deviceDistribution).map(([device, count]: [string, any]) => {
-                      const percentage = stats.totalTests > 0 ? ((count / stats.totalTests) * 100).toFixed(1) : 0;
-                      return (
-                        <div key={device} className="flex items-center justify-between">
-                          <span className="text-gray-700">{device}</span>
-                          <div className="flex items-center space-x-4">
-                            <span className="text-gray-600">{count}</span>
-                            <span className="text-blue-600 font-medium">{percentage}%</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+              <div className="bg-white p-6 rounded-lg shadow-sm">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                  <Smartphone className="w-5 h-5 mr-2" />
+                  Geräte-Verteilung
+                </h3>
+                <div className="space-y-3">
+                  {data.deviceData.map((device) => (
+                    <div key={device.type} className="flex items-center justify-between">
+                      <span className="text-gray-700">{device.type}</span>
+                      <div className="flex items-center space-x-4">
+                        <span className="text-gray-600">{device.count}</span>
+                        <span className="text-blue-600 font-medium">{device.percentage}%</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )}
+              </div>
             </div>
           </div>
         )}
 
         {selectedView === 'analytics' && (
           <div className="space-y-6">
-            {loading ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="text-gray-600 mt-4">Lade Analytics...</p>
+            {/* Abort Analytics */}
+            <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-red-500">
+              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                <AlertTriangle className="w-5 h-5 mr-2 text-red-600" />
+                Abbruch-Analytics
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div>
+                  <p className="text-gray-600 text-sm">Abbrüche Gesamt</p>
+                  <p className="text-2xl font-bold text-red-600">
+                    {data.abortAnalytics.totalAborts}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600 text-sm">Abbruch-Rate</p>
+                  <p className="text-2xl font-bold text-red-600">
+                    {data.abortAnalytics.abortRate.toFixed(1)}%
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600 text-sm">Kritische Fragen</p>
+                  <p className="text-2xl font-bold text-red-600">
+                    {data.abortAnalytics.criticalQuestions.length}
+                  </p>
+                </div>
               </div>
-            ) : stats ? (
-              <>
-                {/* Abort Analytics */}
-                <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-red-500">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-                    <AlertTriangle className="w-5 h-5 mr-2 text-red-600" />
-                    Abbruch-Analytics
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div>
-                      <p className="text-gray-600 text-sm">Abbrüche Gesamt</p>
-                      <p className="text-2xl font-bold text-red-600">
-                        {stats.abortedTests}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600 text-sm">Abbruch-Rate</p>
-                      <p className="text-2xl font-bold text-red-600">
-                        {stats.abortRate}%
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600 text-sm">Kritische Fragen</p>
-                      <p className="text-2xl font-bold text-red-600">
-                        {stats.criticalQuestions?.length || 0}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {stats.criticalQuestions && stats.criticalQuestions.length > 0 && (
-                    <>
-                      <h4 className="font-bold text-gray-900 mb-3">Häufigste Abbruch-Fragen:</h4>
-                      <div className="space-y-3">
-                        {stats.criticalQuestions.map((q: any) => (
-                          <div key={q.questionNum} className="bg-red-50 p-4 rounded-lg">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <p className="font-medium text-gray-900">Frage #{q.questionNum}</p>
-                                <p className="text-sm text-gray-600 mt-1">
-                                  {q.count} Abbrüche bei dieser Frage
-                                </p>
-                              </div>
-                              <span className="bg-red-600 text-white px-3 py-1 rounded-full text-sm">
-                                {q.count}x
-                              </span>
-                            </div>
-                          </div>
-                        ))}
+              
+              {data.abortAnalytics.criticalQuestions.length > 0 && (
+                <>
+                  <h4 className="font-bold text-gray-900 mb-3">Kritische Fragen:</h4>
+                  <div className="space-y-3">
+                    {data.abortAnalytics.criticalQuestions.map((q) => (
+                  <div key={q.questionId} className="bg-red-50 p-4 rounded-lg">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">{q.question}</p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {q.abortCount} Abbrüche • Ø {q.avgTimeBeforeAbort}s vor Abbruch
+                        </p>
                       </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Completion Stats */}
-                <div className="bg-white p-6 rounded-lg shadow-sm">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-                    <Clock className="w-5 h-5 mr-2 text-blue-600" />
-                    Test-Statistiken
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                      <p className="text-gray-600 text-sm">Abgeschlossene Tests</p>
-                      <p className="text-2xl font-bold text-green-600">{stats.completedTests}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {stats.avgCompletionRate}% Abschlussrate
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600 text-sm">Abgebrochene Tests</p>
-                      <p className="text-2xl font-bold text-orange-600">{stats.abortedTests}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {stats.abortRate}% Abbruchrate
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600 text-sm">Kritische Fälle</p>
-                      <p className="text-2xl font-bold text-red-600">{stats.criticalTests}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {stats.totalTests > 0 ? ((stats.criticalTests / stats.totalTests) * 100).toFixed(1) : 0}% aller Tests
-                      </p>
+                      <span className="bg-red-600 text-white px-3 py-1 rounded-full text-sm">
+                        {q.questionId}
+                      </span>
                     </div>
                   </div>
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-12 text-gray-600">
-                Keine Analytics-Daten verfügbar
+                ))}
               </div>
-            )}
+            </div>
+
+            {/* Question Metrics */}
+            <div className="bg-white p-6 rounded-lg shadow-sm">
+              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                <Clock className="w-5 h-5 mr-2 text-blue-600" />
+                Fragen-Metriken
+              </h3>
+              <p className="text-gray-600 mb-4">
+                <span className="font-medium">Fragen-Metriken werden mit mehr Daten angezeigt.</span>
+              </p>
+              
+              <p className="text-gray-600 text-center py-4">
+                Zusätzliche Analytics-Daten werden in zukünftigen Versionen verfügbar sein.
+              </p>
+            </div>
+
+            {/* Question Metrics - Hidden for now
+              <h4 className="font-bold text-gray-900 mb-3">Schwierigste Fragen (längste Denkzeit):</h4>
+              <div className="space-y-3">
+                {data.questionMetrics.mostDifficultQuestions.map((q) => (
+                  <div key={q.questionId} className="bg-yellow-50 p-4 rounded-lg flex items-center justify-between">
+                    <span className="font-medium">{q.questionId}</span>
+                    <div className="flex items-center space-x-6">
+                      <span className="text-gray-600">Ø {q.avgTime}s</span>
+                      <span className="text-orange-600">{(q.changeRate * 100).toFixed(0)}% Änderungen</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
         {selectedView === 'counselors' && (
           <div className="bg-white p-6 rounded-lg shadow-sm">
             <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Berater-Übersicht
+              Berater-Performance
             </h3>
-            {loading ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="text-gray-600 mt-4">Lade Berater-Daten...</p>
-              </div>
-            ) : counselors.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">E-Mail</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rolle</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lizenz</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Klienten</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tests</th>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Klienten</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tests</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ø Risiko</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {data.counselorPerformance.map((counselor) => (
+                    <tr key={counselor.name}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {counselor.name}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {counselor.clients}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {counselor.tests}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-3 py-1 rounded-full text-sm ${
+                          counselor.avgRisk >= 60 ? 'bg-red-100 text-red-600' :
+                          counselor.avgRisk >= 40 ? 'bg-yellow-100 text-yellow-600' :
+                          'bg-green-100 text-green-600'
+                        }`}>
+                          {counselor.avgRisk}%
+                        </span>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {counselors.map((counselor: any) => {
-                      const counselorClients = clients.filter((c: any) => c.counselor_id === counselor.id);
-                      const counselorTests = tests.filter((t: any) => t.counselor_id === counselor.id);
-                      
-                      return (
-                        <tr key={counselor.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {counselor.name}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {counselor.email}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            <span className={`px-2 py-1 rounded-full text-xs ${
-                              counselor.role === 'supervisor' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                            }`}>
-                              {counselor.role === 'supervisor' ? '👑 Supervisor' : '👤 Berater'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {counselor.license_number}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 rounded-full text-xs ${
-                              counselor.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                            }`}>
-                              {counselor.is_active ? '✅ Aktiv' : '❌ Inaktiv'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {counselorClients.length}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {counselorTests.length}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="text-center py-12 text-gray-600">
-                Keine Berater-Daten verfügbar
-              </div>
-            )}
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
