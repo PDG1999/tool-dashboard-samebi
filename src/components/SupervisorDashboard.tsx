@@ -36,10 +36,11 @@ interface SupervisorData {
 
 const SupervisorDashboard: React.FC = () => {
   const [dateRange, setDateRange] = useState('30d');
-  const [selectedView, setSelectedView] = useState<'overview' | 'analytics' | 'counselors'>('overview');
+  const [selectedView, setSelectedView] = useState<'overview' | 'analytics' | 'counselors' | 'tests'>('overview');
   const [data, setData] = useState<SupervisorData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [allTests, setAllTests] = useState<any[]>([]);
 
   useEffect(() => {
     loadSupervisorData();
@@ -55,6 +56,9 @@ const SupervisorDashboard: React.FC = () => {
         api.testResults.getAll(),
         api.counselors.getAll(),
       ]);
+
+      // Speichere alle Tests für die Tests-View
+      setAllTests(testsData);
 
       // Berechne Statistiken aus echten Daten
       const totalTests = testsData.length;
@@ -256,6 +260,12 @@ const SupervisorDashboard: React.FC = () => {
                 className={`pb-2 px-1 ${selectedView === 'overview' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
               >
                 Übersicht
+              </button>
+              <button
+                onClick={() => setSelectedView('tests')}
+                className={`pb-2 px-1 ${selectedView === 'tests' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
+              >
+                Alle Tests
               </button>
               <button
                 onClick={() => setSelectedView('analytics')}
@@ -485,6 +495,92 @@ const SupervisorDashboard: React.FC = () => {
               </div>
             </div>
             */}
+          </div>
+        )}
+
+        {selectedView === 'tests' && (
+          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">
+                Alle Tests ({allTests.length})
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Datum</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Klient</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Risiko</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hauptanliegen</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Standort</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aktionen</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {allTests.map((test: any) => (
+                    <tr key={test.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {new Date(test.created_at).toLocaleDateString('de-DE', { 
+                          day: '2-digit', 
+                          month: '2-digit', 
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {test.client_name || 'Anonym'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          test.risk_level === 'critical' ? 'bg-red-100 text-red-800' :
+                          test.risk_level === 'high' ? 'bg-orange-100 text-orange-800' :
+                          test.risk_level === 'moderate' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {test.risk_level === 'critical' ? 'Kritisch' :
+                           test.risk_level === 'high' ? 'Hoch' :
+                           test.risk_level === 'moderate' ? 'Mittel' : 'Niedrig'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
+                        {test.primary_concern || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {test.professional_scores?.overall || test.public_scores?.overall || 0}/100
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          test.aborted ? 'bg-gray-100 text-gray-600' : 'bg-blue-100 text-blue-600'
+                        }`}>
+                          {test.aborted ? 'Abgebrochen' : 'Vollständig'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {test.tracking_data?.geo_data?.city || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <button
+                          onClick={() => window.location.href = `/client/${test.client_id}`}
+                          className="text-blue-600 hover:text-blue-800 flex items-center"
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          Details
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {allTests.length === 0 && (
+              <div className="p-8 text-center text-gray-500">
+                Keine Tests gefunden.
+              </div>
+            )}
           </div>
         )}
 
