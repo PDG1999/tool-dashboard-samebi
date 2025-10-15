@@ -484,6 +484,7 @@ const SupervisorDashboard: React.FC = () => {
                 ))}
               </div>
             </div>
+            */}
           </div>
         )}
 
