@@ -2,7 +2,7 @@
   "name": "screening-tool-professional",
   "description": "Professionelles Sucht-Screening-Tool für Psychologen und Berater",
   "type": "docker-compose",
-  "repository": "https://github.com/PDG1999/tool-sucht-identifizieren-anonym.git",
+  "repository": "https://github.com/PDG1999/tool-dashboard-samebi.git",
   "branch": "main",
   "buildpack": "dockerfile",
   "dockerfile": "Dockerfile",
