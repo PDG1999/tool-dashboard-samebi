@@ -53,7 +53,7 @@ const SupervisorDashboard: React.FC = () => {
       // Lade alle benötigten Daten parallel
       const [testsData, counselorsData] = await Promise.all([
         api.testResults.getAll(),
-        api.counselors.getStats(),
+        api.counselors.getAll(),
       ]);
 
       // Berechne Statistiken aus echten Daten

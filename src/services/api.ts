@@ -164,6 +164,11 @@ export const counselorsAPI = {
   getAll: async () => {
     return apiCall('/counselors');
   },
+  
+  // Get counselor statistics (supervisor only)
+  getStats: async () => {
+    return apiCall('/counselors/stats');
+  },
 };
 
 // Combined API object for easier imports
