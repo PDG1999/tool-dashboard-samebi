@@ -436,21 +436,23 @@ const SupervisorDashboard: React.FC = () => {
                   <h4 className="font-bold text-gray-900 mb-3">Kritische Fragen:</h4>
                   <div className="space-y-3">
                     {data.abortAnalytics.criticalQuestions.map((q) => (
-                  <div key={q.questionId} className="bg-red-50 p-4 rounded-lg">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{q.question}</p>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {q.abortCount} Abbrüche • Ø {q.avgTimeBeforeAbort}s vor Abbruch
-                        </p>
+                      <div key={q.questionId} className="bg-red-50 p-4 rounded-lg">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900">{q.question}</p>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {q.abortCount} Abbrüche • Ø {q.avgTimeBeforeAbort}s vor Abbruch
+                            </p>
+                          </div>
+                          <span className="bg-red-600 text-white px-3 py-1 rounded-full text-sm">
+                            {q.questionId}
+                          </span>
+                        </div>
                       </div>
-                      <span className="bg-red-600 text-white px-3 py-1 rounded-full text-sm">
-                        {q.questionId}
-                      </span>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </>
+              )}
             </div>
 
             {/* Question Metrics */}
