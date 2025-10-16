@@ -1,4 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const AUTH_SERVICE_URL = import.meta.env.VITE_AUTH_URL || 'https://auth.samebi.net';
 
 // Helper function for PostgREST API calls
 async function apiCall(endpoint: string, options: RequestInit = {}) {
@@ -157,53 +158,119 @@ export const clientsAPI = {
   },
 };
 
-// Auth API (PostgREST RPC)
+// Auth API (Dedicated Auth Service)
 export const authAPI = {
-  // Login via PostgREST RPC function
+  // Login via dedicated Auth Service
   login: async (email: string, password: string) => {
-    const response = await apiCall('/rpc/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-    
-    // Store token if returned
-    if (response && response.token) {
-      localStorage.setItem('auth_token', response.token);
+    try {
+      const response = await fetch(`${AUTH_SERVICE_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Login failed' }));
+        throw new Error(error.error || error.message || `Login failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Store token
+      if (data.token) {
+        localStorage.setItem('auth_token', data.token);
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
     }
-    
-    return response;
   },
 
-  // Register
+  // Verify token
+  verify: async () => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('No token found');
+    }
+
+    try {
+      const response = await fetch(`${AUTH_SERVICE_URL}/auth/verify`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Token verification failed');
+      }
+
+      const data = await response.json();
+      return data.valid;
+    } catch (error) {
+      console.error('Token verification error:', error);
+      return false;
+    }
+  },
+
+  // Register (ready for future use)
   register: async (data: {
     name: string;
     email: string;
     password: string;
     practiceName?: string;
   }) => {
-    // Not implemented in PostgREST yet
-    throw new Error('Registration not available yet');
+    try {
+      const response = await fetch(`${AUTH_SERVICE_URL}/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Registration failed' }));
+        throw new Error(error.error || error.message || 'Registration failed');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Registration error:', error);
+      throw error;
+    }
   },
 
-  // Get current user
+  // Get current user from token
   getMe: async () => {
-    // For now, decode JWT token to get user info
     const token = localStorage.getItem('auth_token');
     if (!token) {
       throw new Error('Not authenticated');
     }
     
-    // Simple JWT decode (payload is base64)
+    // Decode JWT token to get user info
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       return {
         id: payload.user_id,
         email: payload.email,
         role: payload.role,
+        name: payload.name,
       };
     } catch (e) {
+      console.error('Token decode error:', e);
       throw new Error('Invalid token');
     }
+  },
+
+  // Logout
+  logout: () => {
+    localStorage.removeItem('auth_token');
   },
 };
 
